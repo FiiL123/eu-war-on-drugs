@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+pgdata/
+DATA_SOURCES_RESEARCH.md
+backend/.venv/

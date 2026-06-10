@@ -95,69 +95,87 @@ async def _fetch_gdelt_with_retry(client: httpx.AsyncClient, url: str, params: d
 
 async def fetch_gdelt_events(hours_back: int = 24) -> list[dict]:
     gdelt_base = "https://api.gdeltproject.org/api/v2/doc/doc"
-    keywords_query = " OR ".join(f'"{kw}"' for kw in DRUG_KEYWORDS[:10])
-    countries_query = " OR ".join(f"sourcecountry:{c}" for c in EU_COUNTRIES[:15])
 
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(hours=hours_back)
 
-    params = {
-        "query": f"({keywords_query}) ({countries_query}) sourcelang:english",
-        "mode": "ArtList",
-        "maxrecords": 250,
-        "format": "json",
-        "STARTDATETIME": start_date.strftime("%Y%m%d%H%M%S"),
-        "ENDDATETIME": end_date.strftime("%Y%m%d%H%M%S"),
-    }
+    keyword_groups = [
+        ["drug seizure", "cocaine bust", "heroin arrest", "meth lab", "drug trafficking"],
+        ["narcotics seized", "fentanyl", "mdma seizure", "amphetamine", "drug bust"],
+        ["cannabis seized", "hashish", "drug smuggling", "drug lab", "dark web drugs"],
+    ]
+    country_groups = [
+        ["unitedkingdom", "germany", "france", "italy", "spain"],
+        ["netherlands", "belgium", "austria", "poland", "portugal"],
+        ["sweden", "denmark", "finland", "ireland", "greece"],
+        ["croatia", "romania", "bulgaria", "hungary", "norway"],
+    ]
+
+    all_events = []
+    seen_urls = set()
 
     async with httpx.AsyncClient(timeout=30) as client:
-        data = await _fetch_gdelt_with_retry(client, gdelt_base, params)
+        for kw_group in keyword_groups:
+            for cc_group in country_groups:
+                keywords_query = " OR ".join(f'"{kw}"' for kw in kw_group)
+                countries_query = " OR ".join(f"sourcecountry:{c}" for c in cc_group)
 
-    articles = data.get("articles", [])
-    events = []
+                params = {
+                    "query": f"({keywords_query}) ({countries_query}) sourcelang:english",
+                    "mode": "ArtList",
+                    "maxrecords": 75,
+                    "format": "json",
+                    "STARTDATETIME": start_date.strftime("%Y%m%d%H%M%S"),
+                    "ENDDATETIME": end_date.strftime("%Y%m%d%H%M%S"),
+                }
 
-    for article in articles:
-        title = article.get("title", "")
-        url = article.get("url", "")
-        source = article.get("domain", "")
-        pub_date = article.get("seendate", "")
+                try:
+                    data = await _fetch_gdelt_with_retry(client, gdelt_base, params)
+                except Exception as e:
+                    logger.warning(f"Skipping query batch: {e}")
+                    continue
 
-        if not title or not url:
-            continue
+                for article in data.get("articles", []):
+                    url = article.get("url", "")
+                    if url in seen_urls:
+                        continue
+                    seen_urls.add(url)
 
-        drug_type = classify_drug_type(title)
-        category = classify_category(title)
+                    title = article.get("title", "")
+                    source = article.get("domain", "")
+                    pub_date = article.get("seendate", "")
 
-        lat = None
-        lng = None
-        if "latlong" in article and article["latlong"]:
-            try:
-                parts = article["latlong"].split(",")
-                lat = float(parts[0])
-                lng = float(parts[1])
-            except (ValueError, IndexError):
-                pass
+                    if not title or not url:
+                        continue
 
-        event = {
-            "title": title[:500],
-            "description": title,
-            "event_time": pub_date,
-            "lat": lat,
-            "lng": lng,
-            "country": None,
-            "city": None,
-            "category": category,
-            "drug_type": drug_type,
-            "quantity_kg": None,
-            "source_url": url,
-            "source_name": source,
-            "status": "pending",
-        }
+                    lat = None
+                    lng = None
+                    if "latlong" in article and article["latlong"]:
+                        try:
+                            parts = article["latlong"].split(",")
+                            lat = float(parts[0])
+                            lng = float(parts[1])
+                        except (ValueError, IndexError):
+                            pass
 
-        events.append(event)
+                    all_events.append({
+                        "title": title[:500],
+                        "description": title,
+                        "event_time": pub_date,
+                        "lat": lat,
+                        "lng": lng,
+                        "country": None,
+                        "city": None,
+                        "category": classify_category(title),
+                        "drug_type": classify_drug_type(title),
+                        "quantity_kg": None,
+                        "source_url": url,
+                        "source_name": source,
+                        "status": "pending",
+                    })
 
-    logger.info(f"Fetched {len(events)} drug-related events from GDELT")
-    return events
+    logger.info(f"Fetched {len(all_events)} drug-related events from GDELT")
+    return all_events
 
 
 @retry(
