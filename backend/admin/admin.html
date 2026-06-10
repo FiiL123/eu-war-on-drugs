@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - EU War on Drugs Map</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, sans-serif;
+            background: #0a0e17;
+            color: #e5e7eb;
+            min-height: 100vh;
+        }
+        .header {
+            background: #111827;
+            border-bottom: 1px solid #374151;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.2rem; color: #fff; }
+        .header-actions { display: flex; gap: 12px; }
+        .tabs {
+            display: flex;
+            background: #111827;
+            border-bottom: 1px solid #374151;
+            padding: 0 24px;
+        }
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            color: #9ca3af;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            color: #fff;
+            border-bottom-color: #3b82f6;
+        }
+        .content { padding: 24px; }
+        .table-container {
+            background: #111827;
+            border-radius: 8px;
+            border: 1px solid #374151;
+            overflow: hidden;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            background: #1f2937;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #9ca3af;
+        }
+        td {
+            padding: 10px 16px;
+            border-top: 1px solid #374151;
+            font-size: 0.85rem;
+        }
+        tr:hover td { background: #1f293722; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .badge-pending { background: #f59e0b22; color: #f59e0b; }
+        .badge-verified { background: #10b98122; color: #10b981; }
+        .badge-rejected { background: #ef444422; color: #ef4444; }
+        .btn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background: #1f2937;
+            color: #e5e7eb;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #374151; }
+        .btn-approve { border-color: #10b981; color: #10b981; }
+        .btn-approve:hover { background: #10b98122; }
+        .btn-reject { border-color: #ef4444; color: #ef4444; }
+        .btn-reject:hover { background: #ef444422; }
+        .btn-primary { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.hidden { display: none; }
+        .modal {
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal h2 { margin-bottom: 16px; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background: #1f2937;
+            color: #e5e7eb;
+            font-size: 0.9rem;
+        }
+        .form-group textarea { min-height: 80px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            flex: 1;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-card .number { font-size: 1.8rem; font-weight: 700; color: #fff; }
+        .stat-card .label { font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; }
+        .actions-cell { display: flex; gap: 6px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>EU War on Drugs - Admin Panel</h1>
+        <div class="header-actions">
+            <button class="btn" onclick="loadEvents()">Refresh</button>
+            <button class="btn btn-primary" onclick="showAddModal()">+ Add Event</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="pending" onclick="switchTab(this)">Pending Review</div>
+        <div class="tab" data-tab="verified" onclick="switchTab(this)">Verified</div>
+        <div class="tab" data-tab="rejected" onclick="switchTab(this)">Rejected</div>
+        <div class="tab" data-tab="all" onclick="switchTab(this)">All Events</div>
+    </div>
+
+    <div class="content">
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="number" id="stat-pending">-</div>
+                <div class="label">Pending</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="stat-verified">-</div>
+                <div class="label">Verified</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="stat-total">-</div>
+                <div class="label">Total</div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Title</th>
+                        <th>Location</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Source</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="events-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="add-modal">
+        <div class="modal">
+            <h2>Add New Event</h2>
+            <form id="add-form">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" name="title" required />
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea name="description"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Date & Time</label>
+                        <input type="datetime-local" name="event_time" required />
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select name="category">
+                            <option value="seizure">Seizure</option>
+                            <option value="arrest">Arrest</option>
+                            <option value="lab_bust">Lab Bust</option>
+                            <option value="port_interdiction">Port Interdiction</option>
+                            <option value="dark_web">Dark Web Bust</option>
+                            <option value="overdose">Overdose Cluster</option>
+                            <option value="policy">Policy Change</option>
+                            <option value="route">Trafficking Route</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Drug Type</label>
+                        <select name="drug_type">
+                            <option value="cocaine">Cocaine</option>
+                            <option value="heroin">Heroin</option>
+                            <option value="cannabis">Cannabis</option>
+                            <option value="synthetic">Synthetic</option>
+                            <option value="fentanyl">Fentanyl</option>
+                            <option value="mdma">MDMA</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Latitude</label>
+                        <input type="number" step="any" name="lat" required />
+                    </div>
+                    <div class="form-group">
+                        <label>Longitude</label>
+                        <input type="number" step="any" name="lng" required />
+                    </div>
+                    <div class="form-group">
+                        <label>Country</label>
+                        <input type="text" name="country" maxlength="3" />
+                    </div>
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" name="city" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Quantity (kg)</label>
+                        <input type="number" step="any" name="quantity_kg" />
+                    </div>
+                    <div class="form-group">
+                        <label>Source URL</label>
+                        <input type="url" name="source_url" />
+                    </div>
+                    <div class="form-group">
+                        <label>Source Name</label>
+                        <input type="text" name="source_name" />
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;margin-top:16px;">
+                    <button type="submit" class="btn btn-primary">Create Event</button>
+                    <button type="button" class="btn" onclick="hideAddModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8000';
+        let currentTab = 'pending';
+
+        async function loadEvents() {
+            try {
+                const resp = await fetch(`${API}/events?limit=500`);
+                const events = await resp.json();
+                renderTable(events);
+                updateStats(events);
+            } catch (e) {
+                console.error('Failed to load events:', e);
+            }
+        }
+
+        async function updateStatus(id, status) {
+            await fetch(`${API}/events/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+            });
+            loadEvents();
+        }
+
+        async function deleteEvent(id) {
+            if (!confirm('Delete this event?')) return;
+            await fetch(`${API}/events/${id}`, { method: 'DELETE' });
+            loadEvents();
+        }
+
+        function renderTable(events) {
+            const filtered = currentTab === 'all'
+                ? events
+                : events.filter(e => e.status === currentTab);
+
+            const tbody = document.getElementById('events-tbody');
+            tbody.innerHTML = filtered.map(e => `
+                <tr>
+                    <td>${new Date(e.event_time).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</td>
+                    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</td>
+                    <td>${e.city || ''}, ${e.country || ''}</td>
+                    <td><span class="badge" style="background:${getDrugColor(e.drug_type)}22;color:${getDrugColor(e.drug_type)}">${e.drug_type}</span></td>
+                    <td><span class="badge badge-${e.status}">${e.status}</span></td>
+                    <td><a href="${e.source_url || '#'}" target="_blank" style="color:#3b82f6;font-size:0.8rem;">${e.source_name || 'link'}</a></td>
+                    <td class="actions-cell">
+                        ${e.status === 'pending' ? `
+                            <button class="btn btn-approve" onclick="updateStatus(${e.id},'verified')">Verify</button>
+                            <button class="btn btn-reject" onclick="updateStatus(${e.id},'rejected')">Reject</button>
+                        ` : ''}
+                        <button class="btn btn-reject" onclick="deleteEvent(${e.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateStats(events) {
+            document.getElementById('stat-pending').textContent = events.filter(e => e.status === 'pending').length;
+            document.getElementById('stat-verified').textContent = events.filter(e => e.status === 'verified').length;
+            document.getElementById('stat-total').textContent = events.length;
+        }
+
+        function switchTab(el) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            currentTab = el.dataset.tab;
+            loadEvents();
+        }
+
+        function showAddModal() {
+            document.getElementById('add-modal').classList.remove('hidden');
+        }
+
+        function hideAddModal() {
+            document.getElementById('add-modal').classList.add('hidden');
+        }
+
+        function getDrugColor(type) {
+            const colors = {
+                cocaine: '#f9fafb', heroin: '#b45309', cannabis: '#16a34a',
+                synthetic: '#a855f7', fentanyl: '#ef4444', mdma: '#f59e0b', other: '#6b7280'
+            };
+            return colors[type] || '#6b7280';
+        }
+
+        document.getElementById('add-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const data = Object.fromEntries(new FormData(form));
+            data.event_time = new Date(data.event_time).toISOString();
+            if (data.quantity_kg) data.quantity_kg = parseFloat(data.quantity_kg);
+            else delete data.quantity_kg;
+
+            await fetch(`${API}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideAddModal();
+            form.reset();
+            loadEvents();
+        });
+
+        loadEvents();
+    </script>
+</body>
+</html>

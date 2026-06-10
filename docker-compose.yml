@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: drugmap
+      POSTGRES_PASSWORD: drugmap
+      POSTGRES_DB: drugmap
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./data/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://drugmap:drugmap@db:5432/drugmap
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+
+  ingest:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uv run python -c "import asyncio; from gdelt_ingester import ingest_gdelt; asyncio.run(ingest_gdelt(72))"
+    environment:
+      DATABASE_URL: postgresql://drugmap:drugmap@db:5432/drugmap
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
